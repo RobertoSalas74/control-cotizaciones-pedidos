@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Control de Cotizaciones y Pedidos v1.0</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<style>
+:root{
+  --ink:#1E2433;--paper:#F3F4F7;--surface:#FFFFFF;--line:#DCE0E7;--muted:#687086;
+  --blue:#283C8C;--blue-soft:#E7EBF7;
+  --red:#BF352A;--red-soft:#FBE9E7;
+  --amber:#9E5F00;--amber-soft:#FCF0DA;
+  --green:#2C7A4C;--green-soft:#E3F1E8;
+  --grey-soft:#ECEEF2;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{font-family:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:var(--paper);color:var(--ink);font-size:14px;line-height:1.45}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+
+/* Cabecera */
+.top{background:var(--blue);color:#fff;padding:14px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.top h1{margin:0;font-size:18px;font-weight:600;letter-spacing:.01em}
+.top .ver{font-size:12px;opacity:.7;margin-left:6px;font-weight:400}
+.top .sp{flex:1}
+.btn{border:1px solid var(--line);background:var(--surface);padding:8px 14px;border-radius:6px;font-weight:500}
+.btn:hover{background:var(--grey-soft)}
+.btn.pri{background:var(--blue);border-color:var(--blue);color:#fff}
+.btn.pri:hover{background:#1f3075}
+.top .btn.pri{background:#fff;color:var(--blue);border-color:#fff}
+.btn.sm{padding:5px 10px;font-size:13px}
+.btn.danger{color:var(--red);border-color:#EBC3BF}
+.btn.link{border:none;background:none;padding:0;color:var(--blue);text-decoration:underline}
+
+main{max-width:1280px;margin:0 auto;padding:18px 20px 60px}
+
+/* Resumen de alertas */
+.alertbar{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:16px}
+.al{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:10px 14px;text-align:left;display:flex;align-items:baseline;gap:10px;border-left-width:4px}
+.al b{font-size:22px;font-weight:700;min-width:28px}
+.al span{color:var(--muted);font-size:13px}
+.al.atraso{border-left-color:var(--red)} .al.atraso b{color:var(--red)}
+.al.vence{border-left-color:var(--amber)} .al.vence b{color:var(--amber)}
+.al.hoy{border-left-color:var(--blue)} .al.hoy b{color:var(--blue)}
+.al.estancado{border-left-color:#8A90A2} .al.estancado b{color:#5A6072}
+.al.on{background:var(--ink);color:#fff;border-color:var(--ink)} .al.on span,.al.on b{color:#fff}
+
+/* Filtros */
+.filters{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.filters input[type=search]{flex:1;min-width:200px}
+.in,.filters input[type=search],.filters select{border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:8px 10px}
+.chk{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:13px}
+
+/* Tabla */
+.tablewrap{background:var(--surface);border:1px solid var(--line);border-radius:8px;overflow-x:auto}
+table{border-collapse:collapse;width:100%}
+th{font-size:12px;font-weight:600;color:var(--muted);text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);white-space:nowrap;background:#FAFBFC}
+td{padding:10px 12px;border-bottom:1px solid var(--grey-soft);vertical-align:top}
+tbody tr.row{cursor:pointer}
+tbody tr.row:hover{background:#F7F8FB}
+tbody tr.row.sev-atraso{box-shadow:inset 4px 0 0 var(--red)}
+tbody tr.row.sev-vence{box-shadow:inset 4px 0 0 var(--amber)}
+tbody tr.row.sev-hoy{box-shadow:inset 4px 0 0 var(--blue)}
+tbody tr.row.sev-estancado{box-shadow:inset 4px 0 0 #8A90A2}
+tbody tr.row.cerrado td{color:var(--muted)}
+.num{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.nm{font-weight:600;max-width:340px}
+.sub{color:var(--muted);font-size:12px}
+.mono{font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right}
+.tag{display:inline-block;font-size:11px;padding:2px 7px;border-radius:10px;font-weight:600;margin:3px 4px 0 0}
+.tag.atraso,.tag.diferencia{background:var(--red-soft);color:var(--red)}
+.tag.vence{background:var(--amber-soft);color:var(--amber)}
+.tag.hoy{background:var(--blue-soft);color:var(--blue)}
+.tag.estancado{background:var(--grey-soft);color:#4B5163}
+.tipo{font-size:12px;padding:2px 8px;border-radius:4px;border:1px solid var(--line);white-space:nowrap}
+
+/* Barra de avance del estado: el elemento distintivo */
+.prog{display:flex;gap:3px;margin-top:5px}
+.prog i{height:5px;flex:1;min-width:14px;border-radius:2px;background:var(--grey-soft)}
+.prog i.f{background:var(--blue)}
+.prog.done i.f{background:var(--green)}
+.prog.anul i{background:#D5D8E0}
+.est{font-weight:500;white-space:nowrap}
+.last{max-width:260px;font-size:13px}
+.empty{padding:40px 20px;text-align:center;color:var(--muted)}
+
+/* Panel de detalle */
+.drawer-bg{position:fixed;inset:0;background:rgba(20,26,40,.35);display:none;z-index:20}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(680px,100%);background:var(--paper);z-index:21;transform:translateX(100%);transition:transform .2s ease;display:flex;flex-direction:column}
+.drawer.open{transform:none}
+.drawer-bg.open{display:block}
+.dh{background:var(--surface);border-bottom:1px solid var(--line);padding:16px 20px}
+.dh .row1{display:flex;gap:10px;align-items:flex-start}
+.dh h2{margin:0;font-size:17px;font-weight:600;flex:1;line-height:1.3}
+.db{overflow-y:auto;padding:16px 20px 40px;flex:1}
+.x{border:none;background:none;font-size:22px;line-height:1;padding:2px 6px;color:var(--muted)}
+.steps{display:flex;margin-top:14px;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.steps button{flex:1;border:none;border-right:1px solid var(--line);background:var(--surface);padding:8px 4px;font-size:12px;font-weight:500;color:var(--muted)}
+.steps button:last-child{border-right:none}
+.steps button.past{background:var(--blue-soft);color:var(--blue)}
+.steps button.cur{background:var(--blue);color:#fff}
+.steps.done button.cur,.steps.done button.past{background:var(--green-soft);color:var(--green)}
+.steps.done button.cur{background:var(--green);color:#fff}
+.sec{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 16px;margin-bottom:14px}
+.sec h3{margin:0 0 10px;font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px}
+.sec h3 .sp{flex:1}
+.kv{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 18px}
+.kv div span{display:block;font-size:12px;color:var(--muted)}
+.kv div b{font-weight:500}
+.btnrow{display:flex;gap:8px;flex-wrap:wrap}
+.doc{display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-top:1px solid var(--grey-soft)}
+.doc:first-of-type{border-top:none}
+.doc .dt{font-size:11px;font-weight:600;padding:2px 7px;border-radius:4px;background:var(--grey-soft);white-space:nowrap}
+.doc .dt.cotizacion{background:var(--amber-soft);color:var(--amber)}
+.doc .dt.oc{background:var(--blue-soft);color:var(--blue)}
+.doc .dt.guia,.doc .dt.factura{background:var(--green-soft);color:var(--green)}
+.doc .dm{flex:1;min-width:0}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:14px;padding:4px 11px;font-size:13px}
+.chip.on{background:var(--blue);border-color:var(--blue);color:#fff}
+textarea.in{width:100%;min-height:64px;resize:vertical}
+.grid2{display:grid;grid-template-columns:2fr 1fr;gap:8px;margin-top:8px}
+.gl{border-left:2px solid var(--line);padding:2px 0 10px 12px;margin-left:4px;position:relative}
+.gl::before{content:"";position:absolute;left:-5px;top:7px;width:8px;height:8px;border-radius:50%;background:var(--blue)}
+.gl.auto::before{background:#B5BAC7}
+.gl .ga{font-weight:600;font-size:13px}
+.gl.auto .ga{font-weight:500;color:var(--muted)}
+.gl .gp{font-size:12px;color:var(--blue);margin-top:2px}
+
+/* Modales */
+.modal-bg{position:fixed;inset:0;background:rgba(20,26,40,.45);display:none;align-items:flex-start;justify-content:center;z-index:40;overflow-y:auto;padding:30px 12px}
+.modal-bg.open{display:flex}
+.modal{background:var(--surface);border-radius:10px;width:min(760px,100%);box-shadow:0 12px 40px rgba(20,26,40,.25)}
+.modal .mh{padding:16px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center}
+.modal .mh h3{margin:0;font-size:16px;font-weight:600;flex:1}
+.modal .mb{padding:16px 20px}
+.modal .mf{padding:12px 20px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.form label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);font-weight:500}
+.form label.full{grid-column:1/-1}
+.form .in{color:var(--ink);font-size:14px}
+.seg{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.seg button{flex:1;border:none;background:var(--surface);padding:8px}
+.seg button.on{background:var(--blue);color:#fff}
+.it input{width:100%;border:1px solid var(--line);border-radius:4px;padding:5px 6px;font-size:13px}
+.it td{padding:4px}
+.it th{padding:6px 4px}
+.cmp td,.cmp th{font-size:13px}
+.cmp td.nc{color:var(--red);font-style:italic}
+.cmp tfoot td{font-weight:700;border-top:2px solid var(--ink)}
+.note{background:var(--amber-soft);color:#6B4300;border-radius:6px;padding:8px 12px;font-size:13px;margin-bottom:12px}
+
+/* Carga y avisos */
+.loading{position:fixed;inset:0;background:rgba(255,255,255,.75);display:none;align-items:center;justify-content:center;z-index:60;flex-direction:column;gap:12px;font-weight:500}
+.loading.open{display:flex}
+.spin{width:30px;height:30px;border:3px solid var(--blue-soft);border-top-color:var(--blue);border-radius:50%;animation:sp 0.8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 18px;border-radius:6px;z-index:70;display:none;max-width:90%}
+.toast.open{display:block}
+.err{background:var(--red-soft);color:var(--red);border-radius:8px;padding:14px 16px;margin-bottom:14px}
+
+@media (max-width:760px){
+  .alertbar{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .form,.kv,.grid2{grid-template-columns:1fr}
+  main{padding:14px 12px 50px}
+}
+@media (prefers-reduced-motion:reduce){.drawer{transition:none}.spin{animation-duration:2s}}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <h1>Cotizaciones y pedidos <span class="ver" id="ver"></span></h1>
+  <span class="sp"></span>
+  <button class="btn pri" onclick="modalRegistro()">Nuevo registro</button>
+</header>
+
+<main>
+  <div id="errBox"></div>
+  <div class="alertbar" id="alertbar"></div>
+  <div class="filters">
+    <input type="search" id="fBuscar" placeholder="Buscar por asunto, proveedor, OC o solicitante" oninput="renderLista()">
+    <select id="fTipo" onchange="renderLista()">
+      <option value="">Compras y tareas</option>
+      <option value="compra">Solo compras</option>
+      <option value="tarea">Solo tareas</option>
+    </select>
+    <select id="fEstado" onchange="renderLista()"></select>
+    <label class="chk"><input type="checkbox" id="fCerrados" onchange="renderLista()"> Mostrar cerrados</label>
+  </div>
+  <div class="tablewrap">
+    <table>
+      <thead><tr>
+        <th>N°</th><th>Requerimiento</th><th>Tipo</th><th>Proveedor</th><th style="text-align:right">Monto</th>
+        <th>Estado</th><th>Días</th><th>Última gestión</th>
+      </tr></thead>
+      <tbody id="lista"></tbody>
+    </table>
+  </div>
+</main>
+
+<div class="drawer-bg" id="drawerBg" onclick="cerrarDetalle()"></div>
+<aside class="drawer" id="drawer" aria-label="Detalle del registro"></aside>
+
+<div class="modal-bg" id="modalBg"><div class="modal" id="modal" role="dialog" aria-modal="true"></div></div>
+<div class="loading" id="loading"><div class="spin"></div><div id="loadingMsg">Cargando…</div></div>
+<div class="toast" id="toast"></div>
+<input type="file" id="fileDoc" accept="application/pdf,image/*" hidden>
+
+<script>
+/* ================= CONFIGURACIÓN ================= */
+const APP_VERSION = '1.0';
+const SB_URL = 'https://zevbmpkomkugnzokukef.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpldmJtcGtvbWt1Z256b2t1a2VmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ1NzQ2MTQsImV4cCI6MjEwMDE1MDYxNH0.HoVYsKCfonfveChtF3beMMLB-HyHV2THEMmqmgD-ZEw';
+const BUCKET = 'cp-adjuntos';
+const FN_IA = 'leer-documento-cp';
+const FIRMA = 'Roberto Salas\nAdministrador de Facilities – Sodexo Perú\nPlanta Kimberly-Clark';
+const DIAS_ESTANCADO = 7;
+const DIAS_AVISO_VALIDEZ = 3;
+
+const FLUJO = { compra: ['Solicitado', 'Cotizado', 'OC emitida', 'Recibido'], tarea: ['Pendiente', 'En proceso', 'Cerrado'] };
+const CERRADOS = ['Recibido', 'Cerrado', 'Anulado'];
+const DOC_LABEL = { cotizacion: 'Cotización', oc: 'OC', guia: 'Guía', factura: 'Factura' };
+const ACCIONES = ['Envié correo', 'Llamé', 'Reclamé atraso', 'Esperando respuesta', 'Nota'];
+const ALERTAS = [
+  { k: 'atraso', t: 'Atrasados' },
+  { k: 'vence', t: 'Cotizaciones por vencer' },
+  { k: 'hoy', t: 'Acciones para hoy' },
+  { k: 'estancado', t: `Sin movimiento +${DIAS_ESTANCADO} días` },
+];
+
+const sb = supabase.createClient(SB_URL, SB_KEY);
+let REG = [], DOCS = {}, GEST = {};
+let filtroAlerta = null, detalleId = null, gestionAccion = null, revision = null;
+
+/* ================= UTILIDADES ================= */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const pad = n => String(n).padStart(2, '0');
+const hoyISO = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+const sumarDias = (iso, n) => { const [y, m, d] = iso.split('-').map(Number); const t = new Date(y, m - 1, d + n); return `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`; };
+const fFecha = iso => { if (!iso) return '—'; const [y, m, d] = String(iso).slice(0, 10).split('-'); return `${d}/${m}/${y}`; };
+const fFechaHora = ts => { const d = new Date(ts); return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+const diasEntre = (a, b) => Math.floor((new Date(b) - new Date(a)) / 86400000);
+const diasDesdeISO = iso => { const [y, m, d] = iso.split('-').map(Number); const [Y, M, D] = hoyISO().split('-').map(Number); return Math.round((Date.UTC(Y, M - 1, D) - Date.UTC(y, m - 1, d)) / 86400000); };
+const money = (n, mon) => n == null || n === '' ? '—' : `${mon === 'USD' ? 'US$' : 'S/'} ${Number(n).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+const saludo = () => { const h = new Date().getHours(); return h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches'; };
+const reg = id => REG.find(r => r.id === id);
+const docsDe = id => DOCS[id] || [];
+const gestDe = id => GEST[id] || [];
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('open'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('open'), 2600); }
+function loading(on, msg) { $('#loadingMsg').textContent = msg || 'Cargando…'; $('#loading').classList.toggle('open', on); }
+async function copiar(txt) { try { await navigator.clipboard.writeText(txt); toast('Copiado'); } catch { toast('No se pudo copiar, selecciona y copia manualmente'); } }
+function chk(res, contexto) { if (res.error) { throw new Error(`${contexto}: ${res.error.message}`); } return res.data; }
+
+/* ================= DATOS ================= */
+async function cargar() {
+  try {
+    const [r, d, g] = await Promise.all([
+      sb.from('cp_registros').select('*').order('id', { ascending: false }),
+      sb.from('cp_documentos').select('*').order('created_at'),
+      sb.from('cp_gestiones').select('*').order('created_at', { ascending: false }),
+    ]);
+    REG = chk(r, 'Registros'); const docs = chk(d, 'Documentos'); const gest = chk(g, 'Gestiones');
+    DOCS = {}; docs.forEach(x => (DOCS[x.registro_id] ||= []).push(x));
+    GEST = {}; gest.forEach(x => (GEST[x.registro_id] ||= []).push(x));
+    $('#errBox').innerHTML = '';
+  } catch (e) {
+    const faltanTablas = /does not exist|schema cache/i.test(e.message);
+    $('#errBox').innerHTML = `<div class="err"><b>No se pudo cargar la información.</b><br>${esc(e.message)}${faltanTablas ? '<br>Faltan las tablas en Supabase: ejecuta schema.sql en el SQL Editor.' : ''}</div>`;
+  }
+  renderResumen(); renderLista();
+  if (detalleId && reg(detalleId)) renderDetalle();
+}
+
+async function nuevaGestion(registroId, g) {
+  chk(await sb.from('cp_gestiones').insert({ registro_id: registroId, ...g }), 'Gestión');
+}
+
+async function cambiarEstado(r, nuevo, motivo) {
+  if (r.estado === nuevo) return;
+  chk(await sb.from('cp_registros').update({ estado: nuevo, estado_desde: new Date().toISOString() }).eq('id', r.id), 'Estado');
+  await nuevaGestion(r.id, { accion: 'Cambio de estado', detalle: `${r.estado} → ${nuevo}${motivo ? ' (' + motivo + ')' : ''}`, auto: true });
+  r.estado = nuevo;
+}
+
+async function avanzar(r, destino) {
+  const f = FLUJO[r.tipo];
+  if (r.estado !== 'Anulado' && f.indexOf(destino) > f.indexOf(r.estado)) await cambiarEstado(r, destino, 'automático');
+}
+
+async function subirArchivo(registroId, file) {
+  const limpio = file.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w.\-]+/g, '_');
+  const path = `${registroId}/${Date.now()}_${limpio}`;
+  chk(await sb.storage.from(BUCKET).upload(path, file, { contentType: file.type || 'application/octet-stream' }), 'Archivo');
+  return { path, nombre: file.name };
+}
+
+async function verArchivo(path) {
+  const { data, error } = await sb.storage.from(BUCKET).createSignedUrl(path, 3600);
+  if (error) return toast('No se pudo abrir el archivo');
+  window.open(data.signedUrl, '_blank');
+}
+
+/* ================= LÓGICA DE ALERTAS ================= */
+function ultimaGestionManual(r) { return gestDe(r.id).find(g => !g.auto); }
+
+function alertas(r) {
+  const out = [];
+  const hoy = hoyISO();
+  const docs = docsDe(r.id);
+  const fac = docs.filter(d => d.tipo_doc === 'factura').pop();
+  if (r.tipo === 'compra' && fac && r.monto != null && fac.total != null && Math.abs(Number(r.monto) - Number(fac.total)) > 0.5)
+    out.push({ k: 'diferencia', t: 'Factura ≠ OC' });
+  if (CERRADOS.includes(r.estado)) return out;
+
+  if (r.tipo === 'compra' && r.estado === 'OC emitida' && r.fecha_entrega_est && r.fecha_entrega_est < hoy)
+    out.push({ k: 'atraso', t: `Entrega vencida hace ${diasDesdeISO(r.fecha_entrega_est)} d` });
+  else if (r.fecha_limite && r.fecha_limite < hoy)
+    out.push({ k: 'atraso', t: `Fecha límite vencida hace ${diasDesdeISO(r.fecha_limite)} d` });
+
+  if (r.tipo === 'compra' && r.estado === 'Cotizado') {
+    const vals = docs.filter(d => d.tipo_doc === 'cotizacion' && d.validez_hasta).map(d => d.validez_hasta).sort();
+    if (vals.length) {
+      const v = vals[0];
+      if (v < hoy) out.push({ k: 'vence', t: `Cotización vencida ${fFecha(v)}` });
+      else if (v <= sumarDias(hoy, DIAS_AVISO_VALIDEZ)) out.push({ k: 'vence', t: `Cotización vence ${fFecha(v)}` });
+    }
+  }
+
+  const ug = ultimaGestionManual(r);
+  if (ug && ug.proxima_fecha && ug.proxima_fecha <= hoy)
+    out.push({ k: 'hoy', t: ug.proxima_accion ? `Pendiente: ${ug.proxima_accion}` : 'Acción programada' });
+
+  if (diasEntre(r.estado_desde, new Date()) > DIAS_ESTANCADO) out.push({ k: 'estancado', t: 'Sin movimiento' });
+  return out;
+}
+const SEV = { atraso: 0, diferencia: 0, vence: 1, hoy: 2, estancado: 3 };
+function severidad(r) { const a = alertas(r); return a.length ? Math.min(...a.map(x => SEV[x.k])) : 9; }
+function claseSev(r) { const a = alertas(r).filter(x => x.k !== 'diferencia'); if (!a.length) return ''; const k = a.sort((x, y) => SEV[x.k] - SEV[y.k])[0].k; return 'sev-' + k; }
+
+/* ================= LISTADO ================= */
+function renderResumen() {
+  const cuenta = {}; ALERTAS.forEach(a => cuenta[a.k] = 0);
+  REG.forEach(r => { const ks = new Set(alertas(r).map(a => a.k)); ALERTAS.forEach(a => { if (ks.has(a.k)) cuenta[a.k]++; }); });
+  $('#alertbar').innerHTML = ALERTAS.map(a =>
+    `<button class="al ${a.k} ${filtroAlerta === a.k ? 'on' : ''}" onclick="toggleAlerta('${a.k}')"><b>${cuenta[a.k]}</b><span>${a.t}</span></button>`).join('');
+}
+function toggleAlerta(k) { filtroAlerta = filtroAlerta === k ? null : k; renderResumen(); renderLista(); }
+
+function llenarFiltroEstado() {
+  const est = [...new Set([...FLUJO.compra, ...FLUJO.tarea, 'Anulado'])];
+  $('#fEstado').innerHTML = '<option value="">Todos los estados</option>' + est.map(e => `<option>${e}</option>`).join('');
+}
+
+function proveedorDe(r) {
+  if (r.proveedor) return esc(r.proveedor);
+  const n = docsDe(r.id).filter(d => d.tipo_doc === 'cotizacion').length;
+  return n ? `<span class="sub">${n} cotizaci${n === 1 ? 'ón' : 'ones'}</span>` : '<span class="sub">—</span>';
+}
+
+function progreso(r) {
+  const f = FLUJO[r.tipo]; const i = f.indexOf(r.estado);
+  const cls = r.estado === 'Anulado' ? 'anul' : (i === f.length - 1 ? 'done' : '');
+  return `<div class="prog ${cls}">${f.map((_, j) => `<i class="${j <= i ? 'f' : ''}"></i>`).join('')}</div>`;
+}
+
+function renderLista() {
+  const q = norm($('#fBuscar').value), tipo = $('#fTipo').value, est = $('#fEstado').value, verCerr = $('#fCerrados').checked;
+  let rows = REG.filter(r => {
+    if (tipo && r.tipo !== tipo) return false;
+    if (est && r.estado !== est) return false;
+    if (!verCerr && !est && CERRADOS.includes(r.estado)) return false;
+    if (filtroAlerta && !alertas(r).some(a => a.k === filtroAlerta)) return false;
+    if (q) { const txt = norm([r.nombre, r.proveedor, r.oc_numero, r.solicitante, r.responsable, ...docsDe(r.id).map(d => d.proveedor)].join(' ')); if (!txt.includes(q)) return false; }
+    return true;
+  });
+  rows.sort((a, b) => severidad(a) - severidad(b) || b.id - a.id);
+  if (!rows.length) {
+    $('#lista').innerHTML = `<tr><td colspan="8" class="empty">${REG.length ? 'Ningún registro coincide con los filtros.' : 'Aún no hay registros. Crea el primero con “Nuevo registro” usando el asunto del correo de solicitud.'}</td></tr>`;
+    return;
+  }
+  $('#lista').innerHTML = rows.map(r => {
+    const al = alertas(r); const ug = ultimaGestionManual(r); const dias = diasEntre(r.estado_desde, new Date());
+    return `<tr class="row ${claseSev(r)} ${CERRADOS.includes(r.estado) ? 'cerrado' : ''}" onclick="abrirDetalle(${r.id})">
+      <td class="num">#${r.id}</td>
+      <td><div class="nm">${esc(r.nombre)}</div><div class="sub">${esc(r.solicitante || '')}${r.oc_numero ? ' · OC ' + esc(r.oc_numero) : ''}</div>${al.map(a => `<span class="tag ${a.k}">${esc(a.t)}</span>`).join('')}</td>
+      <td><span class="tipo">${r.tipo === 'compra' ? 'Compra' : 'Tarea'}</span></td>
+      <td>${proveedorDe(r)}</td>
+      <td class="mono">${r.monto != null ? money(r.monto, r.moneda) : '<span class="sub">—</span>'}</td>
+      <td><div class="est">${esc(r.estado)}</div>${progreso(r)}</td>
+      <td class="num">${dias}</td>
+      <td class="last">${ug ? `<b>${esc(ug.accion)}</b>${ug.detalle ? ': ' + esc(ug.detalle.slice(0, 90)) : ''}<div class="sub">${fFechaHora(ug.created_at)}</div>` : '<span class="sub">Sin gestiones</span>'}</td>
+    </tr>`;
+  }).join('');
+}
+
+/* ================= DETALLE ================= */
+function abrirDetalle(id) {
+  detalleId = id; gestionAccion = null;
+  renderDetalle();
+  $('#drawer').classList.add('open'); $('#drawerBg').classList.add('open');
+}
+function cerrarDetalle() { $('#drawer').classList.remove('open'); $('#drawerBg').classList.remove('open'); detalleId = null; }
+
+function renderDetalle() {
+  const r = reg(detalleId); if (!r) return cerrarDetalle();
+  const f = FLUJO[r.tipo]; const i = f.indexOf(r.estado);
+  const docs = docsDe(r.id); const gest = gestDe(r.id); const al = alertas(r);
+  const nCot = docs.filter(d => d.tipo_doc === 'cotizacion').length;
+  const done = i === f.length - 1;
+
+  const kv = r.tipo === 'compra' ? [
+    ['Solicitante', r.solicitante], ['Fecha requerida', fFecha(r.fecha_limite)],
+    ['Proveedor', r.proveedor], ['OC', r.oc_numero],
+    ['Monto OC', r.monto != null ? money(r.monto, r.moneda) : null], ['Entrega estimada', fFecha(r.fecha_entrega_est)],
+  ] : [
+    ['Solicitante', r.solicitante], ['Responsable', r.responsable], ['Fecha límite', fFecha(r.fecha_limite)], ['Creado', fFecha(r.created_at)],
+  ];
+
+  $('#drawer').innerHTML = `
+  <div class="dh">
+    <div class="row1">
+      <h2><span class="sub">#${r.id} · ${r.tipo === 'compra' ? 'Compra' : 'Tarea'}</span><br>${esc(r.nombre)}</h2>
+      <button class="btn sm" onclick="modalRegistro(${r.id})">Editar</button>
+      <button class="x" onclick="cerrarDetalle()" aria-label="Cerrar">×</button>
+    </div>
+    <div>${al.map(a => `<span class="tag ${a.k}">${esc(a.t)}</span>`).join('')}</div>
+    <div class="steps ${done ? 'done' : ''}">${f.map((s, j) => `<button class="${r.estado === 'Anulado' ? '' : j < i ? 'past' : j === i ? 'cur' : ''}" onclick="estadoManual('${s}')">${s}</button>`).join('')}</div>
+    ${r.estado === 'Anulado' ? '<div class="note" style="margin:10px 0 0">Registro anulado. Elige un estado para reactivarlo.</div>' : ''}
+  </div>
+  <div class="db">
+    <div class="sec">
+      <div class="kv">${kv.map(([k, v]) => `<div><span>${k}</span><b>${esc(v || '—')}</b></div>`).join('')}</div>
+      ${r.notas ? `<div style="margin-top:10px"><span class="sub">Notas</span><div>${esc(r.notas).replace(/\n/g, '<br>')}</div></div>` : ''}
+    </div>
+
+    ${r.tipo === 'compra' ? `
+    <div class="sec">
+      <h3>Documentos <span class="sp"></span>${nCot ? `<button class="btn sm" onclick="modalComparativo()">Cuadro y correo (${nCot})</button>` : ''}</h3>
+      <div class="btnrow" style="margin-bottom:10px">
+        <button class="btn sm pri" onclick="pedirArchivo('cotizacion')">Subir cotización</button>
+        <button class="btn sm" onclick="pedirArchivo('oc')">Subir OC</button>
+        <button class="btn sm" onclick="pedirArchivo('guia')">Subir guía</button>
+        <button class="btn sm" onclick="pedirArchivo('factura')">Subir factura</button>
+      </div>
+      ${docs.length ? docs.map(d => `
+        <div class="doc">
+          <span class="dt ${d.tipo_doc}">${DOC_LABEL[d.tipo_doc]}</span>
+          <div class="dm">
+            <b>${esc(d.proveedor || 'Sin proveedor')}</b> ${d.numero ? `<span class="sub">N° ${esc(d.numero)}</span>` : ''}
+            <div class="sub">${fFecha(d.fecha)}${d.tipo_doc === 'cotizacion' && d.validez_hasta ? ' · válida hasta ' + fFecha(d.validez_hasta) : ''}${d.tipo_doc === 'oc' && d.fecha_entrega ? ' · entrega ' + fFecha(d.fecha_entrega) : ''}${d.items?.length ? ' · ' + d.items.length + ' ítems' : ''}</div>
+          </div>
+          <b class="mono">${money(d.total, d.moneda)}</b>
+          ${d.archivo_path ? `<button class="btn sm" onclick="verArchivo('${esc(d.archivo_path)}')">Ver</button>` : ''}
+          <button class="btn sm danger" onclick="eliminarDoc(${d.id})" aria-label="Eliminar documento">×</button>
+        </div>`).join('') : '<div class="sub">Sube la cotización en PDF o foto: la IA llena los datos y el estado avanza solo.</div>'}
+    </div>` : ''}
+
+    <div class="sec">
+      <h3>Registrar gestión <span class="sp"></span><button class="btn sm" onclick="modalCorreo()">Correo de seguimiento</button></h3>
+      <div class="chips">${ACCIONES.map(a => `<button class="chip ${gestionAccion === a ? 'on' : ''}" onclick="elegirAccion('${a}')">${a}</button>`).join('')}</div>
+      <textarea class="in" id="g_detalle" placeholder="Qué hiciste o qué te respondieron"></textarea>
+      <div class="grid2">
+        <input class="in" id="g_prox" placeholder="Próxima acción (opcional)">
+        <input class="in" id="g_proxf" type="date" title="Fecha de la próxima acción">
+      </div>
+      <div class="btnrow" style="margin-top:8px;align-items:center">
+        <input type="file" id="g_file" accept="application/pdf,image/*,.msg,.eml" style="flex:1;min-width:0;font-size:13px">
+        <button class="btn pri" onclick="guardarGestion()">Guardar gestión</button>
+      </div>
+    </div>
+
+    <div class="sec">
+      <h3>Historial</h3>
+      ${gest.length ? gest.map(g => `
+        <div class="gl ${g.auto ? 'auto' : ''}">
+          <div class="ga">${esc(g.accion)} <span class="sub">${fFechaHora(g.created_at)}</span></div>
+          ${g.detalle ? `<div>${esc(g.detalle).replace(/\n/g, '<br>')}</div>` : ''}
+          ${g.proxima_accion || g.proxima_fecha ? `<div class="gp">Próximo: ${esc(g.proxima_accion || 'acción')} ${g.proxima_fecha ? '· ' + fFecha(g.proxima_fecha) : ''}</div>` : ''}
+          ${g.archivo_path ? `<button class="btn link sub" onclick="verArchivo('${esc(g.archivo_path)}')">${esc(g.archivo_nombre || 'Adjunto')}</button>` : ''}
+        </div>`).join('') : '<div class="sub">Sin movimientos.</div>'}
+    </div>
+
+    <div class="btnrow">
+      ${r.estado !== 'Anulado' && !CERRADOS.includes(r.estado) ? `<button class="btn" onclick="anular()">Anular</button>` : ''}
+      <button class="btn danger" onclick="eliminarRegistro()">Eliminar registro</button>
+    </div>
+  </div>`;
+}
+
+function elegirAccion(a) {
+  const txt = $('#g_detalle').value, prox = $('#g_prox').value, proxf = $('#g_proxf').value;
+  gestionAccion = gestionAccion === a ? null : a;
+  renderDetalle();
+  $('#g_detalle').value = txt; $('#g_prox').value = prox; $('#g_proxf').value = proxf;
+}
+
+async function guardarGestion() {
+  const r = reg(detalleId);
+  const detalle = $('#g_detalle').value.trim(), prox = $('#g_prox').value.trim(), proxF = $('#g_proxf').value || null, file = $('#g_file').files[0];
+  if (!gestionAccion && !detalle) return toast('Elige una acción o escribe la gestión');
+  loading(true, 'Guardando gestión…');
+  try {
+    const arch = file ? await subirArchivo(r.id, file) : null;
+    await nuevaGestion(r.id, { accion: gestionAccion || 'Nota', detalle: detalle || null, proxima_accion: prox || null, proxima_fecha: proxF, archivo_path: arch?.path || null, archivo_nombre: arch?.nombre || null });
+    if (r.tipo === 'tarea') await avanzar(r, 'En proceso');
+    gestionAccion = null;
+    await cargar(); toast('Gestión guardada');
+  } catch (e) { toast(e.message); }
+  loading(false);
+}
+
+async function estadoManual(nuevo) {
+  const r = reg(detalleId);
+  if (r.estado === nuevo) return;
+  if (!confirm(`¿Cambiar el estado de "${r.estado}" a "${nuevo}"?`)) return;
+  loading(true, 'Actualizando…');
+  try { await cambiarEstado(r, nuevo, 'manual'); await cargar(); } catch (e) { toast(e.message); }
+  loading(false);
+}
+
+async function anular() {
+  const r = reg(detalleId);
+  const motivo = prompt('Motivo de anulación (opcional):');
+  if (motivo === null) return;
+  loading(true, 'Anulando…');
+  try { await cambiarEstado(r, 'Anulado', motivo || 'manual'); await cargar(); } catch (e) { toast(e.message); }
+  loading(false);
+}
+
+async function eliminarRegistro() {
+  const r = reg(detalleId);
+  if (!confirm(`Se eliminará "${r.nombre}" con todos sus documentos, gestiones y archivos.\n\nEsta acción NO se puede deshacer. ¿Continuar?`)) return;
+  loading(true, 'Eliminando…');
+  try {
+    const paths = [...docsDe(r.id), ...gestDe(r.id)].map(x => x.archivo_path).filter(Boolean);
+    if (paths.length) await sb.storage.from(BUCKET).remove(paths);
+    chk(await sb.from('cp_registros').delete().eq('id', r.id), 'Eliminar');
+    cerrarDetalle(); await cargar(); toast('Registro eliminado');
+  } catch (e) { toast(e.message); }
+  loading(false);
+}
+
+async function eliminarDoc(id) {
+  const d = docsDe(detalleId).find(x => x.id === id);
+  if (!confirm(`¿Eliminar ${DOC_LABEL[d.tipo_doc]} ${d.numero || ''} de ${d.proveedor || 'proveedor'}? No se puede deshacer.\nEl estado del registro no retrocede.`)) return;
+  loading(true, 'Eliminando…');
+  try {
+    if (d.archivo_path) await sb.storage.from(BUCKET).remove([d.archivo_path]);
+    chk(await sb.from('cp_documentos').delete().eq('id', id), 'Eliminar documento');
+    await nuevaGestion(detalleId, { accion: 'Documento eliminado', detalle: `${DOC_LABEL[d.tipo_doc]} ${d.numero || ''} ${d.proveedor || ''}`.trim(), auto: true });
+    await cargar();
+  } catch (e) { toast(e.message); }
+  loading(false);
+}
+
+/* ================= MODALES ================= */
+function abrirModal(html) { $('#modal').innerHTML = html; $('#modalBg').classList.add('open'); }
+function cerrarModal() { $('#modalBg').classList.remove('open'); revision = null; }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { if ($('#modalBg').classList.contains('open')) cerrarModal(); else if (detalleId) cerrarDetalle(); } });
+
+/* ---- Nuevo / editar registro ---- */
+let tipoNuevo = 'compra';
+function modalRegistro(id) {
+  const r = id ? reg(id) : null;
+  if (!r) tipoNuevo = 'compra';
+  const t = r ? r.tipo : tipoNuevo;
+  abrirModal(`
+    <div class="mh"><h3>${r ? 'Editar registro' : 'Nuevo registro'}</h3><button class="x" onclick="cerrarModal()" aria-label="Cerrar">×</button></div>
+    <div class="mb"><div class="form">
+      ${r ? '' : `<label class="full">Tipo<div class="seg"><button type="button" class="${t === 'compra' ? 'on' : ''}" onclick="tipoNuevo='compra';modalRegistro()">Compra / cotización</button><button type="button" class="${t === 'tarea' ? 'on' : ''}" onclick="tipoNuevo='tarea';modalRegistro()">Tarea</button></div></label>`}
+      <label class="full">Asunto del correo de solicitud<input class="in" id="r_nombre" value="${esc(r?.nombre || '')}" placeholder="Pega aquí el asunto del correo"></label>
+      <label>Solicitante<input class="in" id="r_solicitante" value="${esc(r?.solicitante || '')}"></label>
+      <label>${t === 'compra' ? 'Fecha requerida' : 'Fecha límite'}<input class="in" type="date" id="r_fecha" value="${r?.fecha_limite || ''}"></label>
+      ${t === 'tarea' ? `<label class="full">Responsable<input class="in" id="r_responsable" value="${esc(r?.responsable || '')}"></label>` : ''}
+      ${r && t === 'compra' ? `<label>Entrega estimada<input class="in" type="date" id="r_entrega" value="${r.fecha_entrega_est || ''}"></label><label>N° OC<input class="in" id="r_oc" value="${esc(r.oc_numero || '')}"></label>` : ''}
+      <label class="full">Notas<textarea class="in" id="r_notas">${esc(r?.notas || '')}</textarea></label>
+    </div></div>
+    <div class="mf"><button class="btn" onclick="cerrarModal()">Cancelar</button><button class="btn pri" onclick="guardarRegistro(${r ? r.id : 'null'})">${r ? 'Guardar cambios' : 'Crear registro'}</button></div>`);
+  setTimeout(() => $('#r_nombre')?.focus(), 30);
+}
+
+async function guardarRegistro(id) {
+  const nombre = $('#r_nombre').value.trim();
+  if (!nombre) return toast('Escribe el asunto del correo');
+  const datos = {
+    nombre, solicitante: $('#r_solicitante').value.trim() || null,
+    fecha_limite: $('#r_fecha').value || null, notas: $('#r_notas').value.trim() || null,
+  };
+  if ($('#r_responsable')) datos.responsable = $('#r_responsable').value.trim() || null;
+  if ($('#r_entrega')) datos.fecha_entrega_est = $('#r_entrega').value || null;
+  if ($('#r_oc')) datos.oc_numero = $('#r_oc').value.trim() || null;
+  loading(true, 'Guardando…');
+  try {
+    if (id) {
+      chk(await sb.from('cp_registros').update(datos).eq('id', id), 'Registro');
+      cerrarModal(); await cargar();
+    } else {
+      datos.tipo = tipoNuevo; datos.estado = FLUJO[tipoNuevo][0];
+      const nuevo = chk(await sb.from('cp_registros').insert(datos).select().single(), 'Registro');
+      await nuevaGestion(nuevo.id, { accion: 'Registro creado', detalle: datos.solicitante ? `Solicitado por ${datos.solicitante}` : null, auto: true });
+      cerrarModal(); await cargar(); abrirDetalle(nuevo.id);
+    }
+  } catch (e) { toast(e.message); }
+  loading(false);
+}
+
+/* ---- Subida y lectura con IA ---- */
+let tipoSubida = null;
+function pedirArchivo(tipo) { tipoSubida = tipo; const fi = $('#fileDoc'); fi.value = ''; fi.click(); }
+$('#fileDoc').addEventListener('change', async e => {
+  const file = e.target.files[0]; if (!file) return;
+  const r = reg(detalleId);
+  if (file.size > 15 * 1024 * 1024) return toast('El archivo supera 15 MB');
+  loading(true, `Leyendo ${DOC_LABEL[tipoSubida].toLowerCase()} con IA…`);
+  let datos = {}, aviso = '';
+  let archivo = null;
+  try {
+    archivo = await subirArchivo(r.id, file);
+  } catch (err) { loading(false); return toast(err.message); }
+  try {
+    const b64 = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result.split(',')[1]); fr.onerror = rej; fr.readAsDataURL(file); });
+    const resp = await fetch(`${SB_URL}/functions/v1/${FN_IA}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY },
+      body: JSON.stringify({ fileBase64: b64, mimeType: file.type || 'application/pdf', tipoDoc: tipoSubida }),
+    });
+    datos = await resp.json();
+    if (!resp.ok || datos.error) { aviso = 'La IA no pudo leer el documento. Completa los datos manualmente.'; datos = {}; }
+  } catch { aviso = 'No se pudo conectar con la IA. Completa los datos manualmente.'; datos = {}; }
+  loading(false);
+  if (tipoSubida === 'cotizacion' && !datos.validez_hasta && datos.validez_dias && datos.fecha) datos.validez_hasta = sumarDias(datos.fecha, Number(datos.validez_dias));
+  revision = { tipo: tipoSubida, registroId: r.id, archivo, items: Array.isArray(datos.items) ? datos.items : [] };
+  modalRevision(datos, aviso);
+});
+
+function campo(id, label, val, type = 'text', full = false) {
+  return `<label class="${full ? 'full' : ''}">${label}<input class="in" id="rv_${id}" type="${type}" value="${esc(val ?? '')}"></label>`;
+}
+
+function modalRevision(d, aviso) {
+  const t = revision.tipo;
+  const mon = d.moneda === 'USD' ? 'USD' : 'PEN';
+  let campos = campo('proveedor', 'Proveedor', d.proveedor, 'text', true) + campo('numero', t === 'oc' ? 'N° OC' : 'N° documento', d.numero) + campo('fecha', 'Fecha', d.fecha, 'date');
+  if (t === 'cotizacion') campos += campo('ruc', 'RUC', d.ruc) + campo('validez_hasta', 'Válida hasta', d.validez_hasta, 'date');
+  if (t === 'oc') campos += campo('fecha_entrega', 'Fecha de entrega', d.fecha_entrega, 'date');
+  if (t !== 'guia') campos += `<label>Moneda<select class="in" id="rv_moneda"><option value="PEN" ${mon === 'PEN' ? 'selected' : ''}>Soles (S/)</option><option value="USD" ${mon === 'USD' ? 'selected' : ''}>Dólares (US$)</option></select></label>` + campo('total', 'Total', d.total, 'number');
+
+  abrirModal(`
+    <div class="mh"><h3>Revisar ${DOC_LABEL[t].toLowerCase()}</h3><button class="x" onclick="cancelarRevision()" aria-label="Cerrar">×</button></div>
+    <div class="mb">
+      ${aviso ? `<div class="note">${esc(aviso)}</div>` : '<div class="sub" style="margin-bottom:12px">Datos leídos por IA. Revisa y corrige antes de guardar.</div>'}
+      <div class="form">${campos}</div>
+      ${t === 'cotizacion' ? `
+        <h4 style="margin:18px 0 8px;font-size:14px">Ítems</h4>
+        <div class="tablewrap"><table class="it"><thead><tr><th>Código</th><th>Descripción</th><th>Cant.</th><th>Und.</th><th>P. unit.</th><th>Total</th><th></th></tr></thead><tbody id="rv_items"></tbody></table></div>
+        <button class="btn sm" style="margin-top:8px" onclick="agregarItem()">Agregar ítem</button>` : ''}
+    </div>
+    <div class="mf">${revision.archivo ? `<button class="btn" onclick="verArchivo('${esc(revision.archivo.path)}')">Ver archivo</button>` : ''}<span style="flex:1"></span><button class="btn" onclick="cancelarRevision()">Cancelar</button><button class="btn pri" onclick="guardarDoc()">Guardar ${DOC_LABEL[t].toLowerCase()}</button></div>`);
+  if (t === 'cotizacion') renderItems();
+}
+
+function renderItems() {
+  const K = ['codigo', 'descripcion', 'cantidad', 'unidad', 'precio_unitario', 'total'];
+  $('#rv_items').innerHTML = revision.items.map((it, i) => `<tr>${K.map(k => `<td><input data-i="${i}" data-k="${k}" value="${esc(it[k] ?? '')}" ${k === 'descripcion' ? 'style="min-width:200px"' : ''} oninput="editItem(this)"></td>`).join('')}<td><button class="x" onclick="quitarItem(${i})" aria-label="Quitar">×</button></td></tr>`).join('')
+    || '<tr><td colspan="7" class="sub" style="padding:10px">Sin ítems.</td></tr>';
+}
+function editItem(el) { revision.items[+el.dataset.i][el.dataset.k] = el.value; }
+function agregarItem() { revision.items.push({ codigo: '', descripcion: '', cantidad: '', unidad: '', precio_unitario: '', total: '' }); renderItems(); }
+function quitarItem(i) { revision.items.splice(i, 1); renderItems(); }
+
+async function cancelarRevision() {
+  if (revision?.archivo) await sb.storage.from(BUCKET).remove([revision.archivo.path]);
+  cerrarModal();
+}
+
+async function guardarDoc() {
+  const d = revision; const r = reg(d.registroId);
+  const val = id => { const el = $('#rv_' + id); return el ? (el.value.trim() || null) : null; };
+  const num = v => { if (v === null || v === '' || v === undefined) return null; const n = parseFloat(String(v).replace(/,/g, '')); return isNaN(n) ? null : n; };
+  const fila = {
+    registro_id: r.id, tipo_doc: d.tipo, proveedor: val('proveedor'), ruc: val('ruc'), numero: val('numero'),
+    fecha: val('fecha'), validez_hasta: val('validez_hasta'), fecha_entrega: val('fecha_entrega'),
+    moneda: val('moneda') || 'PEN', total: num(val('total')),
+    items: (d.items || []).filter(it => String(it.descripcion || '').trim()).map(it => ({
+      codigo: it.codigo || null, descripcion: String(it.descripcion).trim(), cantidad: num(it.cantidad),
+      unidad: it.unidad || null, precio_unitario: num(it.precio_unitario), total: num(it.total),
+    })),
+    archivo_path: d.archivo?.path || null, archivo_nombre: d.archivo?.nombre || null,
+  };
+  loading(true, 'Guardando…');
+  try {
+    chk(await sb.from('cp_documentos').insert(fila), 'Documento');
+    const etq = { cotizacion: 'cotización', oc: 'OC', guia: 'guía de remisión', factura: 'factura' }[d.tipo];
+    await nuevaGestion(r.id, { accion: 'Documento cargado', detalle: `Se cargó ${etq}${fila.numero ? ' N° ' + fila.numero : ''}${fila.proveedor ? ' de ' + fila.proveedor : ''}${fila.total != null ? ' por ' + money(fila.total, fila.moneda) : ''}`, auto: true });
+    if (d.tipo === 'cotizacion') await avanzar(r, 'Cotizado');
+    if (d.tipo === 'oc') {
+      chk(await sb.from('cp_registros').update({ proveedor: fila.proveedor, monto: fila.total, moneda: fila.moneda, oc_numero: fila.numero, fecha_entrega_est: fila.fecha_entrega }).eq('id', r.id), 'Registro');
+      await avanzar(r, 'OC emitida');
+    }
+    if (d.tipo === 'guia' || d.tipo === 'factura') {
+      await avanzar(r, 'Recibido');
+      if (d.tipo === 'factura' && r.monto != null && fila.total != null && Math.abs(Number(r.monto) - fila.total) > 0.5)
+        await nuevaGestion(r.id, { accion: 'Alerta', detalle: `La factura (${money(fila.total, fila.moneda)}) no coincide con la OC (${money(r.monto, r.moneda)})`, auto: true });
+    }
+    revision = null; $('#modalBg').classList.remove('open');
+    await cargar(); toast(`${DOC_LABEL[d.tipo]} guardada`);
+  } catch (e) { toast(e.message); }
+  loading(false);
+}
+
+/* ---- Cuadro comparativo y correo ---- */
+function armarComparativo(r) {
+  const cotis = docsDe(r.id).filter(d => d.tipo_doc === 'cotizacion');
+  const filas = []; const idx = {};
+  cotis.forEach((c, ci) => (c.items || []).forEach(it => {
+    const key = norm(it.descripcion);
+    if (!(key in idx)) { idx[key] = filas.length; filas.push({ desc: it.descripcion, cant: it.cantidad, unidad: it.unidad, precios: {} }); }
+    filas[idx[key]].precios[ci] = it;
+  }));
+  return { cotis, filas };
+}
+
+function modalComparativo() {
+  const r = reg(detalleId); const { cotis, filas } = armarComparativo(r);
+  const noCot = cotis.map((c, ci) => ({ prov: c.proveedor || `Proveedor ${ci + 1}`, items: filas.filter(f => !f.precios[ci]).map(f => f.desc) })).filter(x => x.items.length);
+  const s = saludo();
+  let correo;
+  if (cotis.length === 1) {
+    const c = cotis[0];
+    correo = `${s}, estimados:\n\nSe adjunta cotización de ${r.nombre}.\n\n- ${c.proveedor || 'Proveedor'}: ${money(c.total, c.moneda)}\n\nQuedo atento a su aprobación.\n\nSaludos,\n${FIRMA}`;
+  } else {
+    correo = `${s}, estimados:\n\nSe adjunta cuadro comparativo de cotizaciones de ${r.nombre}.\n\n${cotis.map(c => `- ${c.proveedor || 'Proveedor'}: ${money(c.total, c.moneda)}`).join('\n')}` +
+      (noCot.length ? `\n\n${noCot.map(n => `${n.prov} no cotizó: ${n.items.join(', ')}.`).join('\n')}` : '') +
+      `\n\nQuedo atento a su aprobación.\n\nSaludos,\n${FIRMA}`;
+  }
+  const celda = (it, c) => it ? `<td class="mono">${money(it.precio_unitario, c.moneda)}</td><td class="mono">${money(it.total, c.moneda)}</td>` : `<td class="nc" colspan="2">No cotizado</td>`;
+  abrirModal(`
+    <div class="mh"><h3>Cuadro comparativo</h3><button class="x" onclick="cerrarModal()" aria-label="Cerrar">×</button></div>
+    <div class="mb">
+      ${filas.length ? `
+      <div class="tablewrap"><table class="cmp">
+        <thead><tr><th>Ítem</th><th>Cant.</th>${cotis.map(c => `<th colspan="2">${esc(c.proveedor || 'Proveedor')}<div class="sub">P. unit. / Total</div></th>`).join('')}</tr></thead>
+        <tbody>${filas.map(f => `<tr><td>${esc(f.desc)}</td><td class="num">${esc(f.cant ?? '')} ${esc(f.unidad || '')}</td>${cotis.map((c, ci) => celda(f.precios[ci], c)).join('')}</tr>`).join('')}</tbody>
+        <tfoot><tr><td colspan="2">Total</td>${cotis.map(c => `<td colspan="2" class="mono">${money(c.total, c.moneda)}</td>`).join('')}</tr></tfoot>
+      </table></div>
+      <div class="sub" style="margin-top:6px">Los ítems se agrupan por descripción igual. Si un mismo ítem aparece en dos filas, corrige la descripción en una de las cotizaciones.</div>` : '<div class="sub">Las cotizaciones no tienen ítems cargados; el correo usa solo los totales.</div>'}
+      <h4 style="margin:18px 0 8px;font-size:14px">Correo</h4>
+      <textarea class="in" id="cmpCorreo" style="min-height:200px">${esc(correo)}</textarea>
+    </div>
+    <div class="mf">
+      ${filas.length ? '<button class="btn" onclick="copiarTablaExcel()">Copiar cuadro para Excel</button>' : ''}
+      <span style="flex:1"></span>
+      <button class="btn" onclick="copiar($('#cmpCorreo').value)">Copiar correo</button>
+      <button class="btn pri" onclick="correoEnviado('Cuadro comparativo enviado', $('#cmpCorreo').value)">Copiar y registrar envío</button>
+    </div>`);
+}
+
+function copiarTablaExcel() {
+  const r = reg(detalleId); const { cotis, filas } = armarComparativo(r);
+  const n = v => v == null ? '' : String(v).replace('.', ',');
+  const lines = [['Ítem', 'Cant.', ...cotis.flatMap(c => [`${c.proveedor || 'Proveedor'} P. unit.`, `${c.proveedor || 'Proveedor'} Total`])].join('\t')];
+  filas.forEach(f => lines.push([f.desc, n(f.cant), ...cotis.flatMap((c, ci) => { const it = f.precios[ci]; return it ? [n(it.precio_unitario), n(it.total)] : ['No cotizado', '']; })].join('\t')));
+  lines.push(['Total', '', ...cotis.flatMap(c => ['', n(c.total)])].join('\t'));
+  copiar(lines.join('\n'));
+}
+
+/* ---- Correo de seguimiento ---- */
+function textoSeguimiento(r) {
+  const s = saludo(); const ug = ultimaGestionManual(r);
+  if (r.tipo === 'tarea')
+    return `${s}:\n\nPor favor su apoyo con el avance de "${r.nombre}"${r.fecha_limite ? `, cuya fecha límite es el ${fFecha(r.fecha_limite)}` : ''}. Agradeceré me indiquen el estado actual.\n\nSaludos,\n${FIRMA}`;
+  switch (r.estado) {
+    case 'Solicitado':
+      return `${s}, estimados:\n\nPor favor su apoyo con la cotización de ${r.nombre}${r.fecha_limite ? `, la cual requerimos antes del ${fFecha(r.fecha_limite)}` : ''}.\n\nQuedo atento.\n\nSaludos,\n${FIRMA}`;
+    case 'Cotizado':
+      return `${s}:\n\nPor favor su apoyo con la aprobación de la cotización de ${r.nombre}, enviada${ug ? ' el ' + fFecha(ug.created_at) : ''}, para proceder con la orden de compra.\n\nQuedo atento.\n\nSaludos,\n${FIRMA}`;
+    case 'OC emitida':
+      return `${s}, estimados:\n\nCon referencia a la OC N° ${r.oc_numero || '___'} (${r.nombre})${r.fecha_entrega_est ? `, cuya entrega estaba prevista para el ${fFecha(r.fecha_entrega_est)}` : ''}, agradeceré confirmar la fecha de entrega.\n\nQuedo atento.\n\nSaludos,\n${FIRMA}`;
+    default:
+      return `${s}:\n\nPor favor su apoyo con el seguimiento de ${r.nombre}.\n\nSaludos,\n${FIRMA}`;
+  }
+}
+
+function modalCorreo() {
+  const r = reg(detalleId);
+  abrirModal(`
+    <div class="mh"><h3>Correo de seguimiento</h3><button class="x" onclick="cerrarModal()" aria-label="Cerrar">×</button></div>
+    <div class="mb">
+      <label class="sub">Asunto</label>
+      <input class="in" id="csAsunto" style="width:100%;margin:4px 0 12px" value="${esc('RE: ' + r.nombre)}">
+      <textarea class="in" id="csCuerpo" style="min-height:200px">${esc(textoSeguimiento(r))}</textarea>
+    </div>
+    <div class="mf">
+      <button class="btn" onclick="copiar($('#csAsunto').value)">Copiar asunto</button>
+      <button class="btn" onclick="copiar($('#csCuerpo').value)">Copiar correo</button>
+      <button class="btn pri" onclick="correoEnviado('Envié correo', $('#csCuerpo').value, true)">Copiar y registrar gestión</button>
+    </div>`);
+}
+
+async function correoEnviado(accion, texto, conProxima) {
+  await copiar(texto);
+  const r = reg(detalleId);
+  loading(true, 'Registrando…');
+  try {
+    await nuevaGestion(r.id, { accion, detalle: 'Correo de seguimiento (' + r.estado + ')', proxima_accion: conProxima ? 'Revisar respuesta' : null, proxima_fecha: conProxima ? sumarDias(hoyISO(), 2) : null });
+    if (r.tipo === 'tarea') await avanzar(r, 'En proceso');
+    cerrarModal(); await cargar(); toast('Correo copiado y gestión registrada');
+  } catch (e) { toast(e.message); }
+  loading(false);
+}
+
+/* ================= INICIO ================= */
+$('#ver').textContent = 'v' + APP_VERSION;
+llenarFiltroEstado();
+cargar();
+</script>
+</body>
+</html>
