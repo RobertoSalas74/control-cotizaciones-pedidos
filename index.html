@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Control de Cotizaciones y Pedidos v1.1</title>
+<title>Control de Cotizaciones y Pedidos v1.2</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -215,7 +215,7 @@ textarea.in{width:100%;min-height:64px;resize:vertical}
 
 <script>
 /* ================= CONFIGURACIÓN ================= */
-const APP_VERSION = '1.1';
+const APP_VERSION = '1.2';
 const SB_URL = 'https://zevbmpkomkugnzokukef.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpldmJtcGtvbWt1Z256b2t1a2VmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ1NzQ2MTQsImV4cCI6MjEwMDE1MDYxNH0.HoVYsKCfonfveChtF3beMMLB-HyHV2THEMmqmgD-ZEw';
 const BUCKET = 'cp-adjuntos';
@@ -382,7 +382,7 @@ function renderLista() {
     if (q) { const txt = norm([r.nombre, r.proveedor, r.oc_numero, r.solicitante, r.responsable, ...docsDe(r.id).map(d => d.proveedor)].join(' ')); if (!txt.includes(q)) return false; }
     return true;
   });
-  rows.sort((a, b) => severidad(a) - severidad(b) || b.id - a.id);
+  rows.sort((a, b) => a.id - b.id);
   if (!rows.length) {
     $('#lista').innerHTML = `<tr><td colspan="8" class="empty">${REG.length ? 'Ningún registro coincide con los filtros.' : 'Aún no hay registros. Crea el primero con “Nuevo registro” usando el asunto del correo de solicitud.'}</td></tr>`;
     return;
