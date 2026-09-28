@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Control de Cotizaciones y Pedidos v1.0</title>
+<title>Control de Cotizaciones y Pedidos v1.1</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -178,7 +178,7 @@ textarea.in{width:100%;min-height:64px;resize:vertical}
 <header class="top">
   <h1>Cotizaciones y pedidos <span class="ver" id="ver"></span></h1>
   <span class="sp"></span>
-  <button class="btn pri" onclick="modalRegistro()">Nuevo registro</button>
+  <button class="btn pri" onclick="tipoNuevo='compra';modalRegistro()">Nuevo registro</button>
 </header>
 
 <main>
@@ -215,7 +215,7 @@ textarea.in{width:100%;min-height:64px;resize:vertical}
 
 <script>
 /* ================= CONFIGURACIÓN ================= */
-const APP_VERSION = '1.0';
+const APP_VERSION = '1.1';
 const SB_URL = 'https://zevbmpkomkugnzokukef.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpldmJtcGtvbWt1Z256b2t1a2VmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ1NzQ2MTQsImV4cCI6MjEwMDE1MDYxNH0.HoVYsKCfonfveChtF3beMMLB-HyHV2THEMmqmgD-ZEw';
 const BUCKET = 'cp-adjuntos';
@@ -571,7 +571,6 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') { if ($('#mo
 let tipoNuevo = 'compra';
 function modalRegistro(id) {
   const r = id ? reg(id) : null;
-  if (!r) tipoNuevo = 'compra';
   const t = r ? r.tipo : tipoNuevo;
   abrirModal(`
     <div class="mh"><h3>${r ? 'Editar registro' : 'Nuevo registro'}</h3><button class="x" onclick="cerrarModal()" aria-label="Cerrar">×</button></div>
